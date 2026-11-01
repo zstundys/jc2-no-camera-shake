@@ -73,19 +73,60 @@ def default_game_dir() -> Path | None:
     return None
 
 
-def executables_in(path: Path) -> list[Path]:
-    if path.is_file():
-        return [path]
-    if not path.is_dir():
-        raise SystemExit(f"Not a file or directory: {path}")
-    found = sorted(
-        item
-        for item in path.glob("*.exe")
-        if item.is_file() and "backup" not in item.name.lower()
+def choose_exe(initial_dir: Path | None) -> Path | None:
+    """Ask the user to pick JustCause2.exe. Returns None if they cancel."""
+    import tkinter as tk
+    from tkinter import filedialog
+
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        root.attributes("-topmost", True)
+    except tk.TclError:
+        pass
+    initial = initial_dir if initial_dir and initial_dir.is_dir() else None
+    selected = filedialog.askopenfilename(
+        title="Select JustCause2.exe",
+        initialdir=str(initial) if initial else None,
+        initialfile="JustCause2.exe" if initial else None,
+        filetypes=[
+            ("Just Cause 2 executable", "*.exe"),
+            ("All files", "*.*"),
+        ],
     )
-    if not found:
-        raise SystemExit(f"No executables in {path}")
-    return found
+    root.destroy()
+    if not selected:
+        return None
+    return Path(selected)
+
+
+def prompt_for_exe(initial_dir: Path | None) -> Path | None:
+    try:
+        return choose_exe(initial_dir)
+    except Exception as exc:
+        print(
+            f"Could not open the file dialog ({exc}). "
+            "Pass the path to JustCause2.exe instead.",
+            file=sys.stderr,
+        )
+        return None
+
+
+def show_result(message: str, *, error: bool) -> None:
+    import tkinter as tk
+    from tkinter import messagebox
+
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        root.attributes("-topmost", True)
+    except tk.TclError:
+        pass
+    if error:
+        messagebox.showerror("JC2 no camera shake", message)
+    else:
+        messagebox.showinfo("JC2 no camera shake", message)
+    root.destroy()
 
 
 def classify(data: bytes) -> tuple[str, int | None]:
@@ -165,8 +206,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "path",
         nargs="?",
-        help="JustCause2.exe, or the folder that contains it. "
-        "Searches Steam library folders when omitted.",
+        help="JustCause2.exe. When omitted, a file dialog opens so you can "
+        "select it. A folder opens the dialog there.",
     )
     parser.add_argument(
         "--restore",
@@ -183,31 +224,36 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
+    used_dialog = False
     if args.path:
         target = Path(args.path).expanduser()
-    else:
-        found = default_game_dir()
-        if found is None:
-            print(
-                "Could not find Just Cause 2. Pass the path to JustCause2.exe "
-                "or its folder.",
-                file=sys.stderr,
-            )
+        if target.is_dir():
+            exe = prompt_for_exe(target)
+            used_dialog = True
+        elif target.is_file():
+            exe = target
+        else:
+            print(f"Not a file or directory: {target}", file=sys.stderr)
             return 1
-        target = found
-        print(f"Using {target}")
+    else:
+        exe = prompt_for_exe(default_game_dir())
+        used_dialog = True
 
-    failures = 0
-    for exe in executables_in(target):
-        try:
-            print(patch_file(exe, restore=args.restore, dry_run=args.dry_run))
-        except PermissionError:
-            failures += 1
-            print(
-                f"{exe.name}: cannot write the file. Close the game and try again.",
-                file=sys.stderr,
-            )
-    return 1 if failures else 0
+    if exe is None:
+        print("No file selected.")
+        return 1
+
+    try:
+        message = patch_file(exe, restore=args.restore, dry_run=args.dry_run)
+        failed = "left untouched" in message or "cannot write" in message
+    except PermissionError:
+        message = f"{exe.name}: cannot write the file. Close the game and try again."
+        failed = True
+
+    print(message, file=sys.stderr if failed else sys.stdout)
+    if used_dialog:
+        show_result(message, error=failed)
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

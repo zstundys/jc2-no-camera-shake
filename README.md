@@ -4,7 +4,7 @@ Disables the camera shake in the Windows Steam build of Just Cause 2.
 
 Running, reeling the grappling hook, gunfire, and explosions all add amplitude to one shake value on the camera manager. While that value is above zero, the game builds a random offset and mixes it into the view. This script makes that function return immediately. The run-camera and grapple-camera filters still frame the shot; they no longer shake it.
 
-The change is three bytes in `JustCause2.exe`. A copy of the executable is saved beside it as `JustCause2.exe.noshake-backup` the first time you patch. The script patches any other executable in the game folder that contains the same function, such as a renamed copy.
+The change is three bytes in the executable you select. A copy is saved beside it as `JustCause2.exe.noshake-backup` the first time you patch.
 
 ## Run
 
@@ -14,10 +14,12 @@ Close the game, then from this folder:
 python jc2_no_camera_shake.py
 ```
 
-With no arguments it looks through Steam library folders for `steamapps\common\Just Cause 2\JustCause2.exe`. You can also pass the exe or the game folder:
+A file dialog opens. Choose `JustCause2.exe` in the game folder (usually `steamapps\common\Just Cause 2`). If Steam's library list can be read, the dialog starts in that folder. Cancelling the dialog leaves the game unchanged.
+
+You can also pass the executable directly:
 
 ```text
-python jc2_no_camera_shake.py "D:\SteamLibrary\steamapps\common\Just Cause 2"
+python jc2_no_camera_shake.py "D:\SteamLibrary\steamapps\common\Just Cause 2\JustCause2.exe"
 ```
 
 Check without writing:
